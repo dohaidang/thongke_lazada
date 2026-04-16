@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Lazada Stats",
+  "version": "1.0.0",
+  "description": "Thống kê chi tiêu Lazada",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.lazada.vn/*"],
+      "js": ["src/content/index.ts"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/main-world.ts"],
+      "matches": ["*://*.lazada.vn/*"]
+    }
+  ],
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.lazada.vn/*"
+  ]
+}
