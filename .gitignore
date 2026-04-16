@@ -1,0 +1,72 @@
+project_context.md
+todo.md
+
+# ======================
+# Node modules
+# ======================
+node_modules/
+
+# ======================
+# Build / output
+# ======================
+dist/
+build/
+out/
+release/
+
+# ======================
+# Environment variables
+# ======================
+.env
+.env.*
+!.env.example
+
+# ======================
+# Logs
+# ======================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ======================
+# IDE / Editor
+# ======================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ======================
+# OS files
+# ======================
+.DS_Store
+Thumbs.db
+
+# ======================
+# Temporary / cache
+# ======================
+.tmp/
+.temp/
+.cache/
+*.cache
+
+# ======================
+# Chrome Extension
+# ======================
+*.crx
+*.pem   # private key extension
+
+# ======================
+# Testing / coverage
+# ======================
+coverage/
+
+# ======================
+# Misc
+# ======================
+*.zip
+*.tar
+*.gz
