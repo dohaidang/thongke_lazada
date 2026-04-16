@@ -2,8 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply m-0 min-w-[350px] min-h-[400px] bg-slate-900 text-white font-sans;
-  }
+/* Tailwind v4: avoid @apply in base layer for build portability */
+body {
+  margin: 0;
+  min-width: 350px;
+  min-height: 400px;
+  background: #0f172a; /* slate-900 */
+  color: #ffffff;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
 }

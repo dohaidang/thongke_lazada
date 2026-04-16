@@ -1,4 +1,4 @@
-import { LazadaOrder, ScanCheckpoint } from '../types';
+import type { LazadaOrder, ScanCheckpoint } from '../types';
 
 const DB_NAME = 'lazada_ext';
 const DB_VERSION = 1;
@@ -43,6 +43,21 @@ class LazadaDatabase {
       orders.forEach(order => store.put(order));
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async getAllOrderIds(): Promise<Set<string>> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_ORDERS, 'readonly');
+      const store = tx.objectStore(STORE_ORDERS);
+      const request = store.getAllKeys();
+      request.onsuccess = () => {
+        const set = new Set<string>();
+        for (const key of request.result ?? []) set.add(String(key));
+        resolve(set);
+      };
+      request.onerror = () => reject(request.error);
     });
   }
 

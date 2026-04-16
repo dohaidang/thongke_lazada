@@ -5,8 +5,9 @@ function App() {
 
   const startScan = () => {
     setStatus('Scanning...');
-    chrome.runtime.sendMessage({ type: 'START_SCAN' }, (response) => {
-      if (response && response.status === 'started') {
+    chrome.runtime.sendMessage({ type: 'START_SCAN' }, (response: unknown) => {
+      const resp = response as { status?: string } | null;
+      if (resp && resp.status === 'started') {
         setStatus('Scan Initialized');
       }
     });
