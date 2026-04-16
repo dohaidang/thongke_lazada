@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "idb": "^8.0.3",
     "lucide-react": "^1.8.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.33",
