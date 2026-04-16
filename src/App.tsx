@@ -2,62 +2,27 @@ import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, ShoppingBag, CreditCard, RefreshCw, AlertCircle } from 'lucide-react';
 import { dbService } from './background/db';
-import { LazadaOrder } from './types';
+import { aggregateLazadaStats, type StatsResult } from './utils/statsEngine';
 
 // Utils
 const formatCurrency = (val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 
 export default function App() {
   const [scanState, setScanState] = useState<any>(null);
-  const [stats, setStats] = useState({
-    totalSpent: 0,
+  const [stats, setStats] = useState<StatsResult>({
     totalOrders: 0,
-    chartData: [] as any[],
-    topShop: ''
+    validOrders: 0,
+    totalSpent: 0,
+    monthlyStats: [],
+    topShops: [],
+    topItems: [],
   });
-
-  // Calculate stats from orders
-  const calculateStats = (orders: LazadaOrder[]) => {
-    let totalSpent = 0;
-    const monthMap = new Map<string, number>();
-    const shopMap = new Map<string, number>();
-
-    orders.forEach(o => {
-      // Bỏ qua đơn huỷ/hoàn
-      if (['Canceled', 'Returned', 'Refunded', 'Đã hủy', 'Trả hàng/Hoàn tiền'].includes(o.status)) return;
-      
-      const orderTotal = o.finalTotal || o.subtotal || o.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      totalSpent += orderTotal;
-
-      if (o.createdAt) {
-        const date = new Date(o.createdAt);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + orderTotal);
-      }
-
-      shopMap.set(o.shopName, (shopMap.get(o.shopName) || 0) + orderTotal);
-    });
-
-    const chartData = Array.from(monthMap.entries())
-      .map(([month, amount]) => ({ month, amount }))
-      .sort((a, b) => a.month.localeCompare(b.month));
-
-    let topShop = '';
-    let maxShopStr = 0;
-    shopMap.forEach((val, key) => {
-      if (val > maxShopStr) {
-        maxShopStr = val;
-        topShop = key;
-      }
-    });
-
-    setStats({ totalSpent, totalOrders: orders.length, chartData, topShop });
-  };
 
   const loadData = async () => {
     try {
       const orders = await dbService.getAllOrders();
-      calculateStats(orders);
+      const result = aggregateLazadaStats(orders);
+      setStats(result);
     } catch (e) {
       console.error(e);
     }
@@ -83,6 +48,16 @@ export default function App() {
   const handleStopScan = () => {
     chrome.runtime.sendMessage({ type: 'ABORT_SCAN' });
   };
+
+  const chartData = stats.monthlyStats.map((m) => ({
+    month: m.month,
+    totalSpent: m.totalSpent,
+    orderCount: m.orderCount,
+  }));
+
+  const topShop = stats.topShops[0]?.shopName ?? '';
+  const avgPerOrder = stats.validOrders > 0 ? stats.totalSpent / stats.validOrders : 0;
+  const topItems3 = stats.topItems.slice(0, 3);
 
   return (
     <div className="w-[400px] h-[550px] bg-[#0f172a] text-slate-200 p-5 flex flex-col font-sans overflow-y-auto relative selection:bg-indigo-500/30">
@@ -119,7 +94,9 @@ export default function App() {
         <div className="flex items-center gap-4 mt-4">
           <div className="flex items-center gap-1.5">
             <ShoppingBag className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm font-medium">{stats.totalOrders} total orders</span>
+            <span className="text-sm font-medium">
+              {stats.validOrders}/{stats.totalOrders} valid orders
+            </span>
           </div>
         </div>
       </div>
@@ -131,7 +108,9 @@ export default function App() {
             <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
             <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Top Shop</span>
           </div>
-          <p className="text-sm font-semibold truncate text-white" title={stats.topShop}>{stats.topShop || '--'}</p>
+          <p className="text-sm font-semibold truncate text-white" title={topShop}>
+            {topShop || '--'}
+          </p>
         </div>
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 flex flex-col justify-center">
           <div className="flex items-center gap-2 mb-1">
@@ -139,9 +118,40 @@ export default function App() {
             <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Avg/Order</span>
           </div>
           <p className="text-sm font-semibold text-white">
-            {stats.totalOrders > 0 ? formatCurrency(stats.totalSpent / stats.totalOrders) : '--'}
+            {stats.validOrders > 0 ? formatCurrency(avgPerOrder) : '--'}
           </p>
         </div>
+      </div>
+
+      {/* Optional: Top Items (mini) */}
+      <div className="bg-slate-800/30 rounded-2xl p-4 border border-slate-700/50 mb-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between mb-3">
+          Top Items
+          <span className="text-[10px] font-mono text-slate-500">{topItems3.length}/3</span>
+        </h3>
+        {topItems3.length > 0 ? (
+          <div className="space-y-2">
+            {topItems3.map((it) => (
+              <div
+                key={it.itemName}
+                className="flex items-center justify-between gap-3 rounded-xl bg-slate-900/30 border border-slate-700/40 px-3 py-2"
+                title={it.itemName}
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-white truncate">{it.itemName}</div>
+                  <div className="text-[11px] text-slate-400">
+                    Qty {it.quantity} • {formatCurrency(it.totalSpent)}
+                  </div>
+                </div>
+                <div className="text-[10px] tabular-nums font-mono text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded">
+                  {formatCurrency(it.totalSpent)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-slate-500 text-xs">No items yet. Click Sync Data.</div>
+        )}
       </div>
 
       {/* Chart Section */}
@@ -151,9 +161,9 @@ export default function App() {
           <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
         </h3>
         <div className="h-32 w-full">
-          {stats.chartData.length > 0 ? (
+          {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.chartData}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorSpend" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
@@ -165,9 +175,12 @@ export default function App() {
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
                   itemStyle={{ color: '#e2e8f0', fontWeight: 'bold' }}
-                  formatter={(val: number) => formatCurrency(val)}
+                  formatter={(val) => {
+                    const num = typeof val === 'number' ? val : 0;
+                    return formatCurrency(num);
+                  }}
                 />
-                <Area type="monotone" dataKey="amount" stroke="#818cf8" strokeWidth={2} fillOpacity={1} fill="url(#colorSpend)" />
+                <Area type="monotone" dataKey="totalSpent" stroke="#818cf8" strokeWidth={2} fillOpacity={1} fill="url(#colorSpend)" />
               </AreaChart>
             </ResponsiveContainer>
           ) : (

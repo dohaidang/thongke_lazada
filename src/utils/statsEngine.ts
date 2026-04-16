@@ -1,4 +1,4 @@
-import { LazadaOrder } from '../types';
+import type { LazadaOrder } from '../types';
 
 export interface MonthlyStat {
   month: string; // 'YYYY-MM'
