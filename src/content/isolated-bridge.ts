@@ -1,12 +1,6 @@
-// Content Script: inject main-world + forward its results to extension runtime if needed.
-console.log('[lazada-stats] content script injected');
-
-const mainWorldUrl = chrome.runtime.getURL('src/content/main-world.ts');
-const script = document.createElement('script');
-script.src = mainWorldUrl;
-script.type = 'module';
-script.dataset.lazadaStatsMainWorld = '1';
-(document.head || document.documentElement).appendChild(script);
+// Isolated-world bridge: forwards background → main-world (page) via window.postMessage.
+// Main-world logic lives in `main-world.ts` and is loaded as a separate MV3 content script with world: "MAIN".
+console.log('[lazada-stats] isolated bridge injected');
 
 type LazadaOrderListRequestToMainWorld = {
   type: 'LAZADA_ORDER_LIST_REQUEST';
@@ -27,7 +21,6 @@ type LazadaOrderListResponseFromMainWorld = {
   errorCode?: string;
 };
 
-// Allow background to request Lazada API via main-world.
 chrome.runtime.onMessage.addListener((message: unknown, _sender: unknown, sendResponse: (response?: unknown) => void) => {
   const msg = message as Partial<{ type: string; requestId: string } & LazadaOrderListRequestToMainWorld>;
   if (msg?.type !== 'LAZADA_ORDER_LIST_REQUEST' || !msg.requestId) return;
@@ -41,7 +34,6 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender: unknown, sendRe
     extraForm: msg.extraForm,
   };
 
-  // Wait for matching response from main-world
   const handler = (event: MessageEvent) => {
     if (event.source !== window) return;
     const data = event.data as Partial<LazadaOrderListResponseFromMainWorld>;
@@ -54,11 +46,9 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender: unknown, sendRe
   window.addEventListener('message', handler);
   window.postMessage(request, '*');
 
-  // async response
   return true;
 });
 
-// Debug log: main-world ready + responses
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
   if (event.data?.type === 'LAZADA_MAIN_WORLD_READY') {

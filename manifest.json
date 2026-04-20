@@ -7,29 +7,22 @@
     "default_popup": "index.html"
   },
   "background": {
-    "service_worker": "src/background/index.ts",
+    "service_worker": "src/background/service-worker.ts",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.lazada.vn/*"],
-      "js": ["src/content/index.ts"],
+      "matches": ["*://*.lazada.vn/*", "*://my.lazada.vn/*"],
+      "js": ["src/content/main-world.ts"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://*.lazada.vn/*", "*://my.lazada.vn/*"],
+      "js": ["src/content/isolated-bridge.ts"],
       "run_at": "document_start"
     }
   ],
-  "web_accessible_resources": [
-    {
-      "resources": ["src/content/main-world.ts"],
-      "matches": ["*://*.lazada.vn/*"]
-    }
-  ],
-  "permissions": [
-    "storage",
-    "alarms",
-    "notifications",
-    "scripting"
-  ],
-  "host_permissions": [
-    "*://*.lazada.vn/*"
-  ]
+  "permissions": ["storage", "alarms", "notifications", "scripting"],
+  "host_permissions": ["*://*.lazada.vn/*", "*://my.lazada.vn/*"]
 }

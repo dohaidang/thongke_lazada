@@ -80,29 +80,25 @@ async function requestOrderList(tabId: number, payload: Omit<LazadaOrderListRequ
 function extractOrders(raw: unknown, fallbackStatus: string): LazadaOrder[] {
   if (!raw || typeof raw !== 'object') return [];
 
-  // Tìm node "data" chứa danh sách order_*
   let dataNode: any = null;
   const visit = (node: unknown) => {
     if (!node || typeof node !== 'object') return;
     if (dataNode) return;
-    
-    // Nếu node chứa một key bắt đầu bằng "order_" và một key bắt đầu bằng "orderItem_"
+
     const keys = Object.keys(node as Record<string, unknown>);
-    if (keys.some(k => k.startsWith('order_')) && keys.some(k => k.startsWith('orderItem_'))) {
+    if (keys.some((k) => k.startsWith('order_')) && keys.some((k) => k.startsWith('orderItem_'))) {
       dataNode = node;
       return;
     }
     for (const v of Object.values(node as Record<string, unknown>)) visit(v);
   };
-  
+
   visit(raw);
 
   if (!dataNode) {
-    // Fallback logic của Cursor
     return [];
   }
 
-  // Phân rã dữ liệu Flat theo ID
   const ordersMap = new Map<string, LazadaOrder>();
   const itemsMap = new Map<string, any[]>();
   const shopMap = new Map<string, any>();
@@ -111,7 +107,6 @@ function extractOrders(raw: unknown, fallbackStatus: string): LazadaOrder[] {
     const fields = value?.fields || value;
     if (!fields) return;
 
-    // Lấy tradeOrderId từ trong fields (Lazada thường dùng tradeOrderId)
     const rawId = fields.tradeOrderId ?? fields.orderId ?? fields.order_id ?? fields.id;
     if (!rawId) return;
     const orderId = String(rawId);
@@ -123,9 +118,14 @@ function extractOrders(raw: unknown, fallbackStatus: string): LazadaOrder[] {
           shopName: 'Unknown',
           status: fields.status || fallbackStatus,
           subtotal: typeof fields.subTotal === 'number' ? fields.subTotal : undefined,
-          finalTotal: typeof fields.total === 'number' ? fields.total : typeof fields.price === 'number' ? fields.price : undefined,
+          finalTotal:
+            typeof fields.total === 'number'
+              ? fields.total
+              : typeof fields.price === 'number'
+                ? fields.price
+                : undefined,
           createdAt: typeof fields.createTime === 'number' ? fields.createTime : undefined,
-          items: []
+          items: [],
         });
       } else {
         const existing = ordersMap.get(orderId)!;
@@ -139,7 +139,6 @@ function extractOrders(raw: unknown, fallbackStatus: string): LazadaOrder[] {
     }
   });
 
-  // Gắn kết dữ liệu
   const results: LazadaOrder[] = [];
   ordersMap.forEach((order, orderId) => {
     const shop = shopMap.get(orderId);
@@ -152,11 +151,16 @@ function extractOrders(raw: unknown, fallbackStatus: string): LazadaOrder[] {
     order.items = items.map((item: any) => ({
       itemId: String(item.itemId || item.id || ''),
       title: String(item.title || item.name || ''),
-      price: (typeof item.itemPrice !== 'undefined' ? Number(item.itemPrice) : (typeof item.price === 'string' ? Number(item.price.replace(/[^\d]/g, '')) : Number(item.price))) || 0,
+      price:
+        (typeof item.itemPrice !== 'undefined'
+          ? Number(item.itemPrice)
+          : typeof item.price === 'string'
+            ? Number(item.price.replace(/[^\d]/g, ''))
+            : Number(item.price)) || 0,
       quantity: Number(item.quantity) || 1,
       picUrl: String(item.picUrl || item.image || ''),
       skuText: String(item.sku?.skuText || item.skuText || ''),
-      itemStatus: String(item.status || order.status)
+      itemStatus: String(item.status || order.status),
     }));
 
     results.push(order);
@@ -176,17 +180,16 @@ async function runScan(selectedTabs: string[]) {
 
     const cachedIds = await dbService.getAllOrderIds();
 
-    // Resume checkpoint if valid
     const cp = await dbService.getCheckpoint();
-    let checkpoint: ScanCheckpoint = cp ?? {
-      selectedTabs,
-      currentTabIndex: 0,
-      currentPage: 0,
-      savedAt: Date.now(),
-      isComplete: false,
-    };
+    let checkpoint: ScanCheckpoint =
+      cp ?? {
+        selectedTabs,
+        currentTabIndex: 0,
+        currentPage: 0,
+        savedAt: Date.now(),
+        isComplete: false,
+      };
 
-    // If selectedTabs differs from checkpoint, restart
     if (checkpoint.selectedTabs.join('|') !== selectedTabs.join('|')) {
       checkpoint = {
         selectedTabs,
@@ -198,7 +201,17 @@ async function runScan(selectedTabs: string[]) {
     }
 
     let totalInserted = 0;
-    state = { active: true, progress: { tab: selectedTabs[checkpoint.currentTabIndex] ?? selectedTabs[0] ?? 'all', page: checkpoint.currentPage, fetched: 0, inserted: 0, totalInserted: 0 }, error: null };
+    state = {
+      active: true,
+      progress: {
+        tab: selectedTabs[checkpoint.currentTabIndex] ?? selectedTabs[0] ?? 'all',
+        page: checkpoint.currentPage,
+        fetched: 0,
+        inserted: 0,
+        totalInserted: 0,
+      },
+      error: null,
+    };
 
     for (let tabIdx = checkpoint.currentTabIndex; tabIdx < selectedTabs.length; tabIdx++) {
       const tab = selectedTabs[tabIdx];
@@ -207,7 +220,6 @@ async function runScan(selectedTabs: string[]) {
       for (;;) {
         if (signal.aborted) throw new Error('aborted');
 
-        // Lazada order-list: POST form GraphQL. Variables are best-effort; adjust if Lazada expects different fields.
         const resp = await requestOrderList(tabId, {
           operationName: 'orderList',
           variables: {
@@ -223,11 +235,9 @@ async function runScan(selectedTabs: string[]) {
 
         const orders = extractOrders(resp.data, tab);
         if (orders.length === 0) {
-          // No more pages for this tab
           break;
         }
 
-        // Early stop: if any orderId already cached → stop current tab scan
         const hasDuplicate = orders.some((o) => cachedIds.has(o.orderId));
         const newOrders = hasDuplicate ? orders.filter((o) => !cachedIds.has(o.orderId)) : orders;
 
@@ -259,7 +269,6 @@ async function runScan(selectedTabs: string[]) {
         await dbService.setCheckpoint(checkpoint);
 
         if (hasDuplicate) {
-          // hit cached boundary → move next tab
           break;
         }
 
@@ -281,30 +290,36 @@ async function runScan(selectedTabs: string[]) {
     if (String((e as any)?.message ?? e) === 'aborted') {
       state = { active: false, progress: null, error: null };
     } else {
-      state = { active: false, progress: null, error: { message: e instanceof Error ? e.message : String(e) } };
+      state = {
+        active: false,
+        progress: null,
+        error: { message: e instanceof Error ? e.message : String(e) },
+      };
     }
   } finally {
     currentAbort = null;
   }
 }
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender: unknown, sendResponse: (response?: unknown) => void) => {
-  const msg = message as StartScanMessage | AbortScanMessage | ScanStateMessage | null;
+chrome.runtime.onMessage.addListener(
+  (message: unknown, _sender: unknown, sendResponse: (response?: unknown) => void) => {
+    const msg = message as StartScanMessage | AbortScanMessage | ScanStateMessage | null;
 
-  if (msg?.type === 'START_SCAN') {
-    const selectedTabs = msg.selectedTabs?.length ? msg.selectedTabs : ['all'];
-    void runScan(selectedTabs);
-    sendResponse({ status: 'started' });
-    return;
-  }
+    if (msg?.type === 'START_SCAN') {
+      const selectedTabs = msg.selectedTabs?.length ? msg.selectedTabs : ['all'];
+      void runScan(selectedTabs);
+      sendResponse({ status: 'started' });
+      return;
+    }
 
-  if (msg?.type === 'ABORT_SCAN') {
-    currentAbort?.abort();
-    sendResponse({ status: 'aborted' });
-    return;
-  }
+    if (msg?.type === 'ABORT_SCAN') {
+      currentAbort?.abort();
+      sendResponse({ status: 'aborted' });
+      return;
+    }
 
-  if (msg?.type === 'GET_SCAN_STATE') {
-    sendResponse(state);
-  }
-});
+    if (msg?.type === 'GET_SCAN_STATE') {
+      sendResponse(state);
+    }
+  },
+);
